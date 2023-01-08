@@ -1,0 +1,18 @@
+[package]
+name = "certs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.68"
+arabic_reshaper = "0.4.1"
+csv = "1.1.6"
+eframe = { version = "0.20.1", features = ["dark-light"] }
+egui_extras = "0.20.0"
+native-dialog = "0.6.3"
+rayon = "1.6.1"
+serde = { version = "1.0.152", features = ["derive"] }
+skia-safe = { version = "0.57.0", features = ["textlayout"] }
+tokio = { version = "1.24.1", features = ["full"] }
