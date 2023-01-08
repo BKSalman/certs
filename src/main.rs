@@ -2,13 +2,13 @@
 
 use std::fs;
 
-use certs::{add_fonts, generate_certificate, Record};
+use certs::{add_fonts, generate_certificate, Record, TEMPLATE};
 use eframe::{
     egui::{self, Button, Ui},
     epaint::Vec2,
     App,
 };
-use egui_extras::{Column, TableBuilder};
+use egui_extras::{Column, RetainedImage, TableBuilder};
 use native_dialog::FileDialog;
 use rayon::prelude::*;
 
@@ -21,9 +21,20 @@ fn main() {
     );
 }
 
-#[derive(Default)]
 struct CertApp {
     records: Vec<Record>,
+    window_open: bool,
+    image: RetainedImage,
+}
+
+impl Default for CertApp {
+    fn default() -> Self {
+        Self {
+            image: RetainedImage::from_image_bytes("template", TEMPLATE).unwrap(),
+            records: Vec::default(),
+            window_open: false,
+        }
+    }
 }
 
 impl CertApp {
@@ -109,7 +120,23 @@ impl CertApp {
 impl App for CertApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.set_fonts(add_fonts());
+        if self.window_open {
+            egui::Window::new("Modal Window")
+                .open(&mut self.window_open)
+                .show(ctx, |ui| {
+                    let image = egui::ImageButton::new(
+                        self.image.texture_id(ctx),
+                        Vec2::new(
+                            self.image.size_vec2().x / 2.5,
+                            self.image.size_vec2().y / 2.5,
+                        ),
+                    );
+                    ui.add(image)
+                });
+        }
+
         egui::TopBottomPanel::bottom("BottomPanel").show(ctx, |ui| {
+            ui.set_enabled(!self.window_open);
             ui.horizontal(|ui| {
                 let button = ui.add_sized([20., 30.], Button::new("Import CSV"));
                 if button.clicked() {
@@ -123,10 +150,15 @@ impl App for CertApp {
                 if button.clicked() {
                     println!("Send Email")
                 }
+                let button = ui.add_sized([20., 30.], Button::new("Open Window"));
+                if button.clicked() {
+                    self.window_open = true;
+                }
             });
             ui.set_min_size(Vec2::new(ui.available_height(), 20.));
         });
         egui::CentralPanel::default().show(ctx, |ui| {
+            ui.set_enabled(!self.window_open);
             self.table(ui);
         });
     }

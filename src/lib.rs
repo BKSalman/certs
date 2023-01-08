@@ -5,7 +5,7 @@ use skia_safe::textlayout::{FontCollection, ParagraphBuilder, ParagraphStyle, Te
 use skia_safe::{icu, Canvas, Data, EncodedImageFormat, FontMgr, Image, Paint, Point, Surface};
 use std::fs;
 
-const TEMPLATE: &[u8] = include_bytes!("../assets/template.jpg");
+pub const TEMPLATE: &[u8] = include_bytes!("../assets/template.jpg");
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Record {
@@ -53,6 +53,21 @@ fn draw_text(canvas: &mut Canvas, text: &str, position: Point) {
 fn save_as(surface: &mut Surface, filename: &str) {
     let image = surface.image_snapshot();
     let data = image.encode_to_data(EncodedImageFormat::PNG).unwrap();
+    match fs::create_dir_all("output") {
+        Err(e) => match e.kind() {
+            std::io::ErrorKind::AlreadyExists => {
+                println!("dir already exists: {}", e);
+            }
+            std::io::ErrorKind::PermissionDenied => {
+                // send to frontend somehow
+                panic!("{e}")
+            }
+            _ => {
+                panic!("{e}")
+            }
+        },
+        _ => {}
+    }
     fs::write(format!("output/{filename}"), data.as_bytes()).expect("failed to write to file");
 }
 
