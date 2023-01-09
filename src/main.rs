@@ -4,8 +4,8 @@ use std::fs;
 
 use certs::{add_fonts, generate_certificate, Record, TEMPLATE};
 use eframe::{
-    egui::{self, Button, Ui},
-    epaint::Vec2,
+    egui::{self, Button, Sense, Ui},
+    epaint::{Color32, Pos2, Rect, RectShape, Rounding, Shape, Stroke, Vec2},
     App,
 };
 use egui_extras::{Column, RetainedImage, TableBuilder};
@@ -25,6 +25,7 @@ struct CertApp {
     records: Vec<Record>,
     window_open: bool,
     image: RetainedImage,
+    rect: Rect,
 }
 
 impl Default for CertApp {
@@ -33,6 +34,10 @@ impl Default for CertApp {
             image: RetainedImage::from_image_bytes("template", TEMPLATE).unwrap(),
             records: Vec::default(),
             window_open: false,
+            rect: Rect {
+                min: Pos2::default(),
+                max: Pos2::default(),
+            },
         }
     }
 }
@@ -120,20 +125,34 @@ impl CertApp {
 impl App for CertApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.set_fonts(add_fonts());
-        if self.window_open {
-            egui::Window::new("Modal Window")
-                .open(&mut self.window_open)
-                .show(ctx, |ui| {
-                    let image = egui::ImageButton::new(
-                        self.image.texture_id(ctx),
-                        Vec2::new(
-                            self.image.size_vec2().x / 2.5,
-                            self.image.size_vec2().y / 2.5,
-                        ),
-                    );
-                    ui.add(image)
-                });
-        }
+        egui::Window::new("Modal Window")
+            .open(&mut self.window_open)
+            .show(ctx, |ui| {
+                let image = egui::Image::new(
+                    self.image.texture_id(ctx),
+                    Vec2::new(
+                        self.image.size_vec2().x / 2.5,
+                        self.image.size_vec2().y / 2.5,
+                    ),
+                )
+                .sense(Sense::drag());
+                let res = ui.add(image);
+                if res.drag_started() {
+                    if let Some(position) = res.interact_pointer_pos() {
+                        self.rect.min = position;
+                    }
+                }
+
+                if let Some(position) = res.interact_pointer_pos() {
+                    self.rect.max = position;
+                }
+                ui.painter().rect(
+                    self.rect,
+                    Rounding::none(),
+                    Color32::TRANSPARENT,
+                    Stroke::new(3., Color32::BLACK),
+                )
+            });
 
         egui::TopBottomPanel::bottom("BottomPanel").show(ctx, |ui| {
             ui.set_enabled(!self.window_open);
