@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-use certs::TextRect;
+use certs::{fix_text, TextRect};
 use csv::StringRecord;
 use itertools::Itertools;
 use skia_safe::Point;
@@ -77,13 +77,7 @@ impl CertApp {
             .header(20., |mut header| {
                 for column in self.columns.iter() {
                     header.col(|ui| {
-                        if !column.is_ascii() {
-                            let reshaped = arabic_reshaper::arabic_reshape(&column);
-                            let reshaped = reshaped.chars().rev().collect::<String>();
-                            ui.strong(reshaped);
-                        } else {
-                            ui.strong(column.to_uppercase());
-                        }
+                        ui.strong(fix_text(&column.to_uppercase()));
                     });
                 }
             })
@@ -92,13 +86,7 @@ impl CertApp {
                     body.row(18., |mut row| {
                         for column in record {
                             row.col(|ui| {
-                                if !column.is_ascii() {
-                                    let reshaped = arabic_reshaper::arabic_reshape(&column);
-                                    let reshaped = reshaped.chars().rev().collect::<String>();
-                                    ui.label(reshaped);
-                                } else {
-                                    ui.label(column);
-                                }
+                                ui.label(fix_text(column));
                             });
                         }
                     });
@@ -233,8 +221,11 @@ impl App for CertApp {
                 let (current, current_color) = &mut self.rects[self.current_rect];
 
                 ui.label(
-                    RichText::new(format!("Column: {}", &self.columns[self.current_rect]))
-                        .color(*current_color),
+                    RichText::new(format!(
+                        "Column: {}",
+                        fix_text(&self.columns[self.current_rect])
+                    ))
+                    .color(*current_color),
                 );
 
                 let image = egui::Image::new(
@@ -269,7 +260,7 @@ impl App for CertApp {
                 }
                 ui.horizontal(|ui| {
                     for (i, column) in self.columns.iter().enumerate() {
-                        if ui.button(column).clicked() {
+                        if ui.button(fix_text(column)).clicked() {
                             self.current_rect = i;
                         }
                     }

@@ -112,3 +112,14 @@ pub fn add_fonts() -> FontDefinitions {
 
     fonts
 }
+
+pub fn fix_text(text: &str) -> String {
+    if !text.is_ascii() {
+        return arabic_reshaper::arabic_reshape(text)
+            .chars()
+            .rev()
+            .collect();
+    }
+
+    text.to_string()
+}
