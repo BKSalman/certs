@@ -8,7 +8,7 @@ use std::{fs, sync::Arc};
 
 use certs::{add_fonts, generate_certificate};
 use eframe::{
-    egui::{self, Button, Sense, Ui},
+    egui::{self, Button, RichText, Sense, Ui},
     emath::Align2,
     epaint::{Color32, Rect, Rounding, Stroke, Vec2},
     App,
@@ -86,7 +86,13 @@ impl CertApp {
                     body.row(18., |mut row| {
                         for column in record {
                             row.col(|ui| {
-                                ui.label(column);
+                                if !column.is_ascii() {
+                                    let reshaped = arabic_reshaper::arabic_reshape(&column);
+                                    let reshaped = reshaped.chars().rev().collect::<String>();
+                                    ui.label(reshaped);
+                                } else {
+                                    ui.label(column);
+                                }
                             });
                         }
                     });
@@ -185,6 +191,11 @@ impl App for CertApp {
                 };
                 let (current, current_color) = &mut self.rects[self.current_rect];
 
+                ui.label(
+                    RichText::new(format!("Column: {}", &self.columns[self.current_rect]))
+                        .color(*current_color),
+                );
+
                 let image = egui::Image::new(
                     template.texture_id(ctx),
                     Vec2::new(template.size_vec2().x / 2.5, template.size_vec2().y / 2.5),
@@ -237,7 +248,7 @@ impl App for CertApp {
                 if button.clicked() {
                     println!("Send Email")
                 }
-                let button = ui.add_sized([20., 30.], Button::new("Open Window"));
+                let button = ui.add_sized([20., 30.], Button::new("Edit Layout"));
                 if button.clicked() {
                     self.window_open = true;
                 }
