@@ -9,9 +9,6 @@ use skia_safe::{
 use std::fs;
 use std::sync::Arc;
 
-pub const TEMPLATE: &[u8] = include_bytes!("../assets/template.jpg");
-pub const TEST: &[u8] = include_bytes!("../assets/template1.jpg");
-
 #[derive(Debug, Deserialize, Clone)]
 pub struct Record {
     pub id: String,
@@ -27,7 +24,6 @@ pub fn generate_certificate(record: &Record, position: Point, width: f32, templa
     let mut canvas = surface.canvas();
     canvas.draw_image(image, Point::new(0., 0.), Some(&Paint::default()));
     // draw_text(&mut canvas, &record.id, position, width);
-    println!("{position:#?}");
     draw_text(&mut canvas, &record.name, position, width);
     // draw_text(&mut canvas, &record.email, Point::new(600., 400.));
     save_as(&mut surface, &filename);

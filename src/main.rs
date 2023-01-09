@@ -2,7 +2,7 @@
 
 use std::{fs, sync::Arc};
 
-use certs::{add_fonts, generate_certificate, Record, TEMPLATE, TEST};
+use certs::{add_fonts, generate_certificate, Record};
 use eframe::{
     egui::{self, Button, Sense, Ui},
     emath::Align2,
@@ -11,6 +11,7 @@ use eframe::{
 };
 use egui_extras::{Column, RetainedImage, TableBuilder};
 use native_dialog::FileDialog;
+use rand::{distributions::Standard, prelude::*};
 use rayon::prelude::*;
 use skia_safe::Point;
 
@@ -27,24 +28,50 @@ struct CertApp {
     records: Vec<Record>,
     window_open: bool,
     image: Option<RetainedImage>,
-    rect: Rect,
-    text_pos: Pos2,
+    current_rect: usize,
+    rects: [(TextRect, Color32); 3],
     template: Arc<Vec<u8>>,
 }
 
 impl Default for CertApp {
     fn default() -> Self {
+        let mut rng = rand::thread_rng();
         Self {
             image: None,
             records: Vec::default(),
             window_open: false,
-            rect: Rect {
-                min: Pos2::default(),
-                max: Pos2::default(),
-            },
-            text_pos: Pos2::default(),
+            current_rect: 0,
+            rects: [
+                (TextRect::default(), rng.gen::<Wrapper<Color32>>().0),
+                (TextRect::default(), rng.gen::<Wrapper<Color32>>().0),
+                (TextRect::default(), rng.gen::<Wrapper<Color32>>().0),
+            ],
             template: Arc::default(),
         }
+    }
+}
+
+#[derive(Clone)]
+struct TextRect {
+    pub p1: Pos2,
+    pub p2: Pos2,
+}
+
+impl Default for TextRect {
+    fn default() -> Self {
+        Self {
+            p1: Pos2::default(),
+            p2: Pos2::default(),
+        }
+    }
+}
+
+struct Wrapper<T>(T);
+
+impl Distribution<Wrapper<Color32>> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Wrapper<Color32> {
+        let (r, g, b) = rng.gen();
+        Wrapper(Color32::from_rgb(r, g, b))
     }
 }
 
@@ -54,6 +81,9 @@ impl CertApp {
     }
     fn set_template(&mut self, template: Arc<Vec<u8>>) {
         self.template = template;
+    }
+    fn current_rect(&self) -> &TextRect {
+        &self.rects[self.current_rect].0
     }
     fn table(&mut self, ui: &mut Ui) {
         let table = TableBuilder::new(ui)
@@ -120,8 +150,9 @@ impl CertApp {
     fn parallel_certificates(&self) -> anyhow::Result<()> {
         {
             let records = self.records.clone();
-            let width = self.rect.width().abs() * 2.5;
-            let draw_pos = self.text_pos.clone();
+            let width = (self.current_rect().p1.x - self.current_rect().p2.x).abs();
+            let draw_pos =
+                Rect::from_two_pos(self.current_rect().p1, self.current_rect().p2).left_top();
             let template = self.template.clone();
 
             std::thread::spawn(move || {
@@ -160,7 +191,7 @@ impl CertApp {
 impl App for CertApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.set_fonts(add_fonts());
-        egui::Window::new("Modal Window")
+        egui::Window::new("Draw Areas")
             .open(&mut self.window_open)
             .anchor(Align2::CENTER_CENTER, [0., 0.])
             .resizable(false)
@@ -170,6 +201,8 @@ impl App for CertApp {
                     ui.label("choose a template");
                     return;
                 };
+                let current = &mut self.rects[self.current_rect].0;
+                let current_color = &self.rects[self.current_rect].1;
 
                 let image = egui::Image::new(
                     template.texture_id(ctx),
@@ -177,27 +210,46 @@ impl App for CertApp {
                 )
                 .sense(Sense::drag());
                 let image_res = ui.add(image);
+
+                // window.width - img.width will give us: right border + left border, we divide
+                // by 2 to get a single border space
+                let border_diff = (ctx.used_rect().width() - image.size().x) / 2.;
+                // the vertical diff is: top border + bottom border + (other elements)
+                // if we remove the two borders, we get the diff of the elements and title
+                let title_diff = ctx.used_rect().height() - image.size().y - (border_diff * 2.0);
+                let offset = Vec2::new(border_diff, border_diff + title_diff)
+                    + ctx.used_rect().min.to_vec2();
+
                 if image_res.drag_started() {
                     if let Some(position) = image_res.interact_pointer_pos() {
-                        self.rect.min = (position - ctx.used_rect().min).to_pos2();
+                        current.p1 = position - offset;
                     }
                 }
 
                 if let Some(position) = image_res.interact_pointer_pos() {
-                    self.rect.max = (position - ctx.used_rect().min).to_pos2();
-                    self.text_pos =
-                        self.rect.min.min(self.rect.max) - (ctx.used_rect().size() - image.size());
+                    current.p2 = position - offset;
                 }
 
                 ui.painter().rect(
                     Rect {
-                        max: self.rect.min.max(self.rect.max) + ctx.used_rect().min.to_vec2(),
-                        min: self.rect.min.min(self.rect.max) + ctx.used_rect().min.to_vec2(),
+                        max: (current.p1.max(current.p2) + offset),
+                        min: (current.p1.min(current.p2) + offset),
                     },
                     Rounding::none(),
                     Color32::TRANSPARENT,
-                    Stroke::new(3., Color32::BLACK),
-                )
+                    Stroke::new(3., *current_color),
+                );
+                ui.horizontal(|ui| {
+                    if ui.button("id").clicked() {
+                        self.current_rect = 0;
+                    }
+                    if ui.button("name").clicked() {
+                        self.current_rect = 1;
+                    }
+                    if ui.button("email").clicked() {
+                        self.current_rect = 2;
+                    }
+                });
             });
 
         egui::TopBottomPanel::bottom("BottomPanel").show(ctx, |ui| {

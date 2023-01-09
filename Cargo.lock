@@ -407,6 +407,7 @@ dependencies = [
  "egui_extras",
  "image",
  "native-dialog",
+ "rand",
  "rayon",
  "serde",
  "skia-safe",
