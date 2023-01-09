@@ -117,7 +117,11 @@ impl CertApp {
 
             std::thread::spawn(move || {
                 records.par_iter().for_each(|record| {
-                    generate_certificate(&record, Point::new(rect.min.x, rect.min.y));
+                    generate_certificate(
+                        &record,
+                        Point::new(rect.min.x, rect.min.y) * 2.5,
+                        rect.width().abs(),
+                    );
                 });
             });
         }

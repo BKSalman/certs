@@ -17,21 +17,21 @@ pub struct Record {
     pub email: String,
 }
 
-pub fn generate_certificate(record: &Record, position: Point) {
+pub fn generate_certificate(record: &Record, position: Point, width: f32) {
     let filename = format!("{}-{}", record.id, record.name);
     let data = Data::new_copy(TEMPLATE);
     let image = Image::from_encoded(data).unwrap();
     let mut surface = Surface::new_raster_n32_premul(image.dimensions()).unwrap();
     let mut canvas = surface.canvas();
     canvas.draw_image(image, Point::new(0., 0.), Some(&Paint::default()));
-    draw_text(&mut canvas, &record.id, position);
+    draw_text(&mut canvas, &record.id, position, width);
     // draw_text(&mut canvas, &record.name, Point::new(600., 400.));
     // draw_text(&mut canvas, &record.email, Point::new(600., 400.));
     save_as(&mut surface, &filename);
     println!("saved!");
 }
 
-fn draw_text(canvas: &mut Canvas, text: &str, position: Point) {
+fn draw_text(canvas: &mut Canvas, text: &str, position: Point, width: f32) {
     icu::init();
 
     let mut font_collection = FontCollection::new();
@@ -57,7 +57,8 @@ fn draw_text(canvas: &mut Canvas, text: &str, position: Point) {
     let mut paragraph_builder = ParagraphBuilder::new(&paragraph_style, font_collection);
     paragraph_builder.push_style(&text_style).add_text(text);
     let mut paragraph = paragraph_builder.build();
-    paragraph.layout(256.);
+    println!("width: {}", width);
+    paragraph.layout(width);
     paragraph.paint(canvas, position);
 }
 
