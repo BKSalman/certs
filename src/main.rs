@@ -1,8 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-use std::fs;
+use std::{fs, sync::Arc};
 
-use certs::{add_fonts, generate_certificate, Record, TEMPLATE};
+use certs::{add_fonts, generate_certificate, Record, TEMPLATE, TEST};
 use eframe::{
     egui::{self, Button, Sense, Ui},
     emath::Align2,
@@ -26,20 +26,24 @@ fn main() {
 struct CertApp {
     records: Vec<Record>,
     window_open: bool,
-    image: RetainedImage,
+    image: Option<RetainedImage>,
     rect: Rect,
+    text_pos: Pos2,
+    template: Arc<Vec<u8>>,
 }
 
 impl Default for CertApp {
     fn default() -> Self {
         Self {
-            image: RetainedImage::from_image_bytes("template", TEMPLATE).unwrap(),
+            image: None,
             records: Vec::default(),
             window_open: false,
             rect: Rect {
                 min: Pos2::default(),
                 max: Pos2::default(),
             },
+            text_pos: Pos2::default(),
+            template: Arc::default(),
         }
     }
 }
@@ -47,6 +51,9 @@ impl Default for CertApp {
 impl CertApp {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         Self::default()
+    }
+    fn set_template(&mut self, template: Arc<Vec<u8>>) {
+        self.template = template;
     }
     fn table(&mut self, ui: &mut Ui) {
         let table = TableBuilder::new(ui)
@@ -113,18 +120,39 @@ impl CertApp {
     fn parallel_certificates(&self) -> anyhow::Result<()> {
         {
             let records = self.records.clone();
-            let rect = self.rect.clone();
+            let width = self.rect.width().abs() * 2.5;
+            let draw_pos = self.text_pos.clone();
+            let template = self.template.clone();
 
             std::thread::spawn(move || {
                 records.par_iter().for_each(|record| {
                     generate_certificate(
                         &record,
-                        Point::new(rect.min.x, rect.min.y) * 2.5,
-                        rect.width().abs(),
+                        Point::new(draw_pos.x, draw_pos.y) * 2.5,
+                        width,
+                        template.clone(),
                     );
                 });
             });
         }
+        Ok(())
+    }
+
+    fn pick_template(&mut self) -> anyhow::Result<()> {
+        let current_dir = std::env::current_dir()?;
+
+        let path = FileDialog::new()
+            .set_location(&current_dir)
+            .add_filter("Template Image", &["jpg", "png", "jpeg"])
+            .show_open_single_file()?;
+        if let Some(path) = path {
+            let image = fs::read(path)?;
+            self.image = Some(
+                RetainedImage::from_image_bytes("Template Image", &image).expect("retained image"),
+            );
+            self.set_template(Arc::new(image));
+        }
+
         Ok(())
     }
 }
@@ -138,23 +166,27 @@ impl App for CertApp {
             .resizable(false)
             .collapsible(false)
             .show(ctx, |ui| {
+                let Some(template) = &self.image else {
+                    ui.label("choose a template");
+                    return;
+                };
+
                 let image = egui::Image::new(
-                    self.image.texture_id(ctx),
-                    Vec2::new(
-                        self.image.size_vec2().x / 2.5,
-                        self.image.size_vec2().y / 2.5,
-                    ),
+                    template.texture_id(ctx),
+                    Vec2::new(template.size_vec2().x / 2.5, template.size_vec2().y / 2.5),
                 )
                 .sense(Sense::drag());
-                let res = ui.add(image);
-                if res.drag_started() {
-                    if let Some(position) = res.interact_pointer_pos() {
+                let image_res = ui.add(image);
+                if image_res.drag_started() {
+                    if let Some(position) = image_res.interact_pointer_pos() {
                         self.rect.min = (position - ctx.used_rect().min).to_pos2();
                     }
                 }
 
-                if let Some(position) = res.interact_pointer_pos() {
+                if let Some(position) = image_res.interact_pointer_pos() {
                     self.rect.max = (position - ctx.used_rect().min).to_pos2();
+                    self.text_pos =
+                        self.rect.min.min(self.rect.max) - (ctx.used_rect().size() - image.size());
                 }
 
                 ui.painter().rect(
@@ -186,6 +218,10 @@ impl App for CertApp {
                 let button = ui.add_sized([20., 30.], Button::new("Open Window"));
                 if button.clicked() {
                     self.window_open = true;
+                }
+                let button = ui.add_sized([20., 30.], Button::new("Choose Template"));
+                if button.clicked() {
+                    self.pick_template().expect("pick template");
                 }
             });
             ui.set_min_size(Vec2::new(ui.available_height(), 20.));
