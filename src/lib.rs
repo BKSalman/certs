@@ -1,20 +1,13 @@
+use csv::StringRecord;
 use eframe::egui::{FontData, FontDefinitions};
 use eframe::epaint::{FontFamily, Pos2};
-use serde::Deserialize;
 use skia_safe::textlayout::{FontCollection, ParagraphBuilder, ParagraphStyle, TextStyle};
-use skia_safe::{
-    icu, Canvas, Data, EncodedImageFormat, Font, FontMgr, FontStyle, Image, Paint, Point, Surface,
-    Typeface,
-};
+use skia_safe::{icu, Canvas, Data, EncodedImageFormat, FontMgr, Image, Paint, Point, Surface};
+use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct Record {
-    pub id: String,
-    pub name: String,
-    pub email: String,
-}
+pub type Record = HashMap<String, String>;
 
 #[derive(Clone)]
 pub struct TextRect {
@@ -40,14 +33,18 @@ impl TextRect {
     }
 }
 
-pub fn generate_certificate(record: &Record, points: Vec<(Point, f32)>, template: Arc<Vec<u8>>) {
-    let filename = format!("{}-{}", record.id, record.name);
+pub fn generate_certificate(
+    record: &StringRecord,
+    points: Vec<(Point, f32)>,
+    template: Arc<Vec<u8>>,
+) {
+    let filename = format!("{}-{}", &record[0], &record[0]);
     let data = Data::new_copy(&template);
     let image = Image::from_encoded(data).unwrap();
     let mut surface = Surface::new_raster_n32_premul(image.dimensions()).unwrap();
     let mut canvas = surface.canvas();
     canvas.draw_image(image, Point::new(0., 0.), Some(&Paint::default()));
-    for (field, point) in [&record.id, &record.name, &record.email].iter().zip(points) {
+    for (field, point) in record.iter().zip(points) {
         let width = point.1;
         draw_text(&mut canvas, field, point.0, width);
     }
@@ -70,18 +67,9 @@ fn draw_text(canvas: &mut Canvas, text: &str, position: Point, width: f32) {
         .set_font_size(40.)
         .set_foreground_color(Paint::default());
 
-    let font = Font::new(
-        Typeface::from_name("AlHor", FontStyle::default()).expect("typeface"),
-        40.,
-    );
-    let measured = font.measure_str("someting", Some(&Paint::default()));
-
-    println!("{measured:#?}");
-
     let mut paragraph_builder = ParagraphBuilder::new(&paragraph_style, font_collection);
     paragraph_builder.push_style(&text_style).add_text(text);
     let mut paragraph = paragraph_builder.build();
-    println!("width: {}", width);
     paragraph.layout(width);
     paragraph.paint(canvas, position);
 }

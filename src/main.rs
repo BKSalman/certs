@@ -1,10 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
 use certs::TextRect;
+use csv::StringRecord;
+use itertools::Itertools;
 use skia_safe::Point;
 use std::{fs, sync::Arc};
 
-use certs::{add_fonts, generate_certificate, Record};
+use certs::{add_fonts, generate_certificate};
 use eframe::{
     egui::{self, Button, Sense, Ui},
     emath::Align2,
@@ -26,27 +28,24 @@ fn main() {
 }
 
 struct CertApp {
-    records: Vec<Record>,
+    columns: StringRecord,
+    records: Vec<StringRecord>,
     window_open: bool,
     image: Option<RetainedImage>,
     current_rect: usize,
-    rects: [(TextRect, Color32); 3],
+    rects: Vec<(TextRect, Color32)>,
     template: Arc<Vec<u8>>,
 }
 
 impl Default for CertApp {
     fn default() -> Self {
-        let mut rng = rand::thread_rng();
         Self {
-            image: None,
+            columns: StringRecord::default(),
             records: Vec::default(),
             window_open: false,
+            image: None,
             current_rect: 0,
-            rects: [
-                (TextRect::default(), rng.gen::<Wrapper<Color32>>().0),
-                (TextRect::default(), rng.gen::<Wrapper<Color32>>().0),
-                (TextRect::default(), rng.gen::<Wrapper<Color32>>().0),
-            ],
+            rects: Vec::default(),
             template: Arc::default(),
         }
     }
@@ -72,36 +71,24 @@ impl CertApp {
         let table = TableBuilder::new(ui)
             .striped(true)
             .cell_layout(egui::Layout::left_to_right(eframe::emath::Align::Center))
-            .columns(Column::remainder().resizable(true), 3);
+            .columns(Column::remainder().resizable(true), self.columns.len());
 
         table
             .header(20., |mut header| {
-                header.col(|ui| {
-                    ui.strong("ID");
-                });
-                header.col(|ui| {
-                    ui.strong("Name");
-                });
-                header.col(|ui| {
-                    ui.strong("Email");
-                });
+                for column in self.columns.iter() {
+                    header.col(|ui| {
+                        ui.strong(column.to_uppercase());
+                    });
+                }
             })
             .body(|mut body| {
                 for record in self.records.iter() {
                     body.row(18., |mut row| {
-                        row.col(|ui| {
-                            ui.label(record.id.clone());
-                        });
-                        row.col(|ui| {
-                            let mut reshaped = arabic_reshaper::arabic_reshape(&record.name);
-                            if !reshaped.is_ascii() {
-                                reshaped = reshaped.chars().rev().collect();
-                            }
-                            ui.label(reshaped);
-                        });
-                        row.col(|ui| {
-                            ui.label(record.email.clone());
-                        });
+                        for column in record {
+                            row.col(|ui| {
+                                ui.label(column);
+                            });
+                        }
                     });
                 }
             });
@@ -119,11 +106,20 @@ impl CertApp {
             let file = fs::read(path)?;
             println!("set file");
             let mut reader = csv::Reader::from_reader(&file[..]);
+
+            self.columns = reader.headers()?.clone();
+
             self.records = reader
-                .deserialize::<Record>()
-                .map(|e| e.expect("proper csv entry"))
-                .filter(|e| !e.id.is_empty() && !e.name.is_empty() && !e.email.is_empty())
-                .collect::<Vec<Record>>();
+                .records()
+                .map(|r| r.expect("csv entry"))
+                .filter(|r| r.iter().find(|r| r.is_empty()).is_none())
+                .collect_vec();
+
+            let mut rng = rand::thread_rng();
+            for _ in 0..self.columns.len() {
+                self.rects
+                    .push((TextRect::default(), rng.gen::<Wrapper<Color32>>().0))
+            }
             println!("save records");
         }
 
@@ -187,8 +183,7 @@ impl App for CertApp {
                     ui.label("choose a template");
                     return;
                 };
-                let current = &mut self.rects[self.current_rect].0;
-                let current_color = &self.rects[self.current_rect].1;
+                let (current, current_color) = &mut self.rects[self.current_rect];
 
                 let image = egui::Image::new(
                     template.texture_id(ctx),
@@ -219,14 +214,10 @@ impl App for CertApp {
                     Stroke::new(3., *current_color),
                 );
                 ui.horizontal(|ui| {
-                    if ui.button("id").clicked() {
-                        self.current_rect = 0;
-                    }
-                    if ui.button("name").clicked() {
-                        self.current_rect = 1;
-                    }
-                    if ui.button("email").clicked() {
-                        self.current_rect = 2;
+                    for (i, column) in self.columns.iter().enumerate() {
+                        if ui.button(column).clicked() {
+                            self.current_rect = i;
+                        }
                     }
                 });
             });
