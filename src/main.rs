@@ -5,12 +5,14 @@ use std::fs;
 use certs::{add_fonts, generate_certificate, Record, TEMPLATE};
 use eframe::{
     egui::{self, Button, Sense, Ui},
-    epaint::{Color32, Pos2, Rect, RectShape, Rounding, Shape, Stroke, Vec2},
+    emath::Align2,
+    epaint::{Color32, Pos2, Rect, Rounding, Stroke, Vec2},
     App,
 };
 use egui_extras::{Column, RetainedImage, TableBuilder};
 use native_dialog::FileDialog;
 use rayon::prelude::*;
+use skia_safe::Point;
 
 fn main() {
     let native_options = eframe::NativeOptions::default();
@@ -110,11 +112,12 @@ impl CertApp {
 
     fn parallel_certificates(&self) -> anyhow::Result<()> {
         {
-            let c = self.records.clone();
+            let records = self.records.clone();
+            let rect = self.rect.clone();
 
             std::thread::spawn(move || {
-                c.par_iter().for_each(|record| {
-                    generate_certificate(&record);
+                records.par_iter().for_each(|record| {
+                    generate_certificate(&record, Point::new(rect.min.x, rect.min.y));
                 });
             });
         }
@@ -127,6 +130,9 @@ impl App for CertApp {
         ctx.set_fonts(add_fonts());
         egui::Window::new("Modal Window")
             .open(&mut self.window_open)
+            .anchor(Align2::CENTER_CENTER, [0., 0.])
+            .resizable(false)
+            .collapsible(false)
             .show(ctx, |ui| {
                 let image = egui::Image::new(
                     self.image.texture_id(ctx),
@@ -139,15 +145,19 @@ impl App for CertApp {
                 let res = ui.add(image);
                 if res.drag_started() {
                     if let Some(position) = res.interact_pointer_pos() {
-                        self.rect.min = position;
+                        self.rect.min = (position - ctx.used_rect().min).to_pos2();
                     }
                 }
 
                 if let Some(position) = res.interact_pointer_pos() {
-                    self.rect.max = position;
+                    self.rect.max = (position - ctx.used_rect().min).to_pos2();
                 }
+
                 ui.painter().rect(
-                    self.rect,
+                    Rect {
+                        max: self.rect.min.max(self.rect.max) + ctx.used_rect().min.to_vec2(),
+                        min: self.rect.min.min(self.rect.max) + ctx.used_rect().min.to_vec2(),
+                    },
                     Rounding::none(),
                     Color32::TRANSPARENT,
                     Stroke::new(3., Color32::BLACK),

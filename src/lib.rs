@@ -2,7 +2,10 @@ use eframe::egui::{FontData, FontDefinitions};
 use eframe::epaint::FontFamily;
 use serde::Deserialize;
 use skia_safe::textlayout::{FontCollection, ParagraphBuilder, ParagraphStyle, TextStyle};
-use skia_safe::{icu, Canvas, Data, EncodedImageFormat, FontMgr, Image, Paint, Point, Surface};
+use skia_safe::{
+    icu, Canvas, Data, EncodedImageFormat, Font, FontMgr, FontStyle, Image, Paint, Point, Surface,
+    Typeface,
+};
 use std::fs;
 
 pub const TEMPLATE: &[u8] = include_bytes!("../assets/template.jpg");
@@ -14,23 +17,23 @@ pub struct Record {
     pub email: String,
 }
 
-pub fn generate_certificate(record: &Record) {
-    println!("{record:#?}");
+pub fn generate_certificate(record: &Record, position: Point) {
     let filename = format!("{}-{}", record.id, record.name);
     let data = Data::new_copy(TEMPLATE);
     let image = Image::from_encoded(data).unwrap();
     let mut surface = Surface::new_raster_n32_premul(image.dimensions()).unwrap();
     let mut canvas = surface.canvas();
     canvas.draw_image(image, Point::new(0., 0.), Some(&Paint::default()));
-    draw_text(&mut canvas, &record.id, Point::new(600., 400.));
-    draw_text(&mut canvas, &record.name, Point::new(600., 400.));
-    draw_text(&mut canvas, &record.email, Point::new(600., 400.));
+    draw_text(&mut canvas, &record.id, position);
+    // draw_text(&mut canvas, &record.name, Point::new(600., 400.));
+    // draw_text(&mut canvas, &record.email, Point::new(600., 400.));
     save_as(&mut surface, &filename);
     println!("saved!");
 }
 
 fn draw_text(canvas: &mut Canvas, text: &str, position: Point) {
     icu::init();
+
     let mut font_collection = FontCollection::new();
     font_collection.set_default_font_manager(FontMgr::new(), None);
 
@@ -43,10 +46,18 @@ fn draw_text(canvas: &mut Canvas, text: &str, position: Point) {
         .set_font_size(40.)
         .set_foreground_color(Paint::default());
 
+    let font = Font::new(
+        Typeface::from_name("AlHor", FontStyle::default()).expect("typeface"),
+        40.,
+    );
+    let measured = font.measure_str("someting", Some(&Paint::default()));
+
+    println!("{measured:#?}");
+
     let mut paragraph_builder = ParagraphBuilder::new(&paragraph_style, font_collection);
     paragraph_builder.push_style(&text_style).add_text(text);
     let mut paragraph = paragraph_builder.build();
-    paragraph.layout(256.0);
+    paragraph.layout(256.);
     paragraph.paint(canvas, position);
 }
 
