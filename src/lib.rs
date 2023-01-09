@@ -38,7 +38,7 @@ pub fn generate_certificate(
     points: Vec<(Point, f32)>,
     template: Arc<Vec<u8>>,
 ) {
-    let filename = format!("{}-{}", &record[0], &record[1]);
+    let filename = format!("{}-{}.png", &record[0], &record[1]);
     let data = Data::new_copy(&template);
     let image = Image::from_encoded(data).unwrap();
     let mut surface = Surface::new_raster_n32_premul(image.dimensions()).unwrap();

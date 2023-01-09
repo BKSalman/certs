@@ -77,7 +77,13 @@ impl CertApp {
             .header(20., |mut header| {
                 for column in self.columns.iter() {
                     header.col(|ui| {
-                        ui.strong(column.to_uppercase());
+                        if !column.is_ascii() {
+                            let reshaped = arabic_reshaper::arabic_reshape(&column);
+                            let reshaped = reshaped.chars().rev().collect::<String>();
+                            ui.strong(reshaped);
+                        } else {
+                            ui.strong(column.to_uppercase());
+                        }
                     });
                 }
             })
