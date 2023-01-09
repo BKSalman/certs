@@ -1,5 +1,5 @@
 use eframe::egui::{FontData, FontDefinitions};
-use eframe::epaint::FontFamily;
+use eframe::epaint::{FontFamily, Pos2};
 use serde::Deserialize;
 use skia_safe::textlayout::{FontCollection, ParagraphBuilder, ParagraphStyle, TextStyle};
 use skia_safe::{
@@ -16,16 +16,41 @@ pub struct Record {
     pub email: String,
 }
 
-pub fn generate_certificate(record: &Record, position: Point, width: f32, template: Arc<Vec<u8>>) {
+#[derive(Clone)]
+pub struct TextRect {
+    pub p1: Pos2,
+    pub p2: Pos2,
+}
+
+impl Default for TextRect {
+    fn default() -> Self {
+        Self {
+            p1: Pos2::default(),
+            p2: Pos2::default(),
+        }
+    }
+}
+
+impl TextRect {
+    pub fn min(&self) -> Self {
+        Self {
+            p1: self.p1.min(self.p2),
+            p2: self.p1.max(self.p2),
+        }
+    }
+}
+
+pub fn generate_certificate(record: &Record, points: Vec<(Point, f32)>, template: Arc<Vec<u8>>) {
     let filename = format!("{}-{}", record.id, record.name);
     let data = Data::new_copy(&template);
     let image = Image::from_encoded(data).unwrap();
     let mut surface = Surface::new_raster_n32_premul(image.dimensions()).unwrap();
     let mut canvas = surface.canvas();
     canvas.draw_image(image, Point::new(0., 0.), Some(&Paint::default()));
-    // draw_text(&mut canvas, &record.id, position, width);
-    draw_text(&mut canvas, &record.name, position, width);
-    // draw_text(&mut canvas, &record.email, Point::new(600., 400.));
+    for (field, point) in [&record.id, &record.name, &record.email].iter().zip(points) {
+        let width = point.1;
+        draw_text(&mut canvas, field, point.0, width);
+    }
     save_as(&mut surface, &filename);
     println!("saved!");
 }

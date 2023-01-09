@@ -1,19 +1,20 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
+use certs::TextRect;
+use skia_safe::Point;
 use std::{fs, sync::Arc};
 
 use certs::{add_fonts, generate_certificate, Record};
 use eframe::{
     egui::{self, Button, Sense, Ui},
     emath::Align2,
-    epaint::{Color32, Pos2, Rect, Rounding, Stroke, Vec2},
+    epaint::{Color32, Rect, Rounding, Stroke, Vec2},
     App,
 };
 use egui_extras::{Column, RetainedImage, TableBuilder};
 use native_dialog::FileDialog;
 use rand::{distributions::Standard, prelude::*};
 use rayon::prelude::*;
-use skia_safe::Point;
 
 fn main() {
     let native_options = eframe::NativeOptions::default();
@@ -51,21 +52,6 @@ impl Default for CertApp {
     }
 }
 
-#[derive(Clone)]
-struct TextRect {
-    pub p1: Pos2,
-    pub p2: Pos2,
-}
-
-impl Default for TextRect {
-    fn default() -> Self {
-        Self {
-            p1: Pos2::default(),
-            p2: Pos2::default(),
-        }
-    }
-}
-
 struct Wrapper<T>(T);
 
 impl Distribution<Wrapper<Color32>> for Standard {
@@ -81,9 +67,6 @@ impl CertApp {
     }
     fn set_template(&mut self, template: Arc<Vec<u8>>) {
         self.template = template;
-    }
-    fn current_rect(&self) -> &TextRect {
-        &self.rects[self.current_rect].0
     }
     fn table(&mut self, ui: &mut Ui) {
         let table = TableBuilder::new(ui)
@@ -150,19 +133,22 @@ impl CertApp {
     fn parallel_certificates(&self) -> anyhow::Result<()> {
         {
             let records = self.records.clone();
-            let width = (self.current_rect().p1.x - self.current_rect().p2.x).abs();
-            let draw_pos =
-                Rect::from_two_pos(self.current_rect().p1, self.current_rect().p2).left_top();
+            let points = self
+                .rects
+                .iter()
+                .map(|r| {
+                    let points = r.0.min();
+                    (
+                        Point::new(points.p1.x, points.p1.y) * 2.5,
+                        (points.p1.x - points.p2.x).abs() * 2.5,
+                    )
+                })
+                .collect::<Vec<(Point, f32)>>();
             let template = self.template.clone();
 
             std::thread::spawn(move || {
-                records.par_iter().for_each(|record| {
-                    generate_certificate(
-                        &record,
-                        Point::new(draw_pos.x, draw_pos.y) * 2.5,
-                        width,
-                        template.clone(),
-                    );
+                records.par_iter().for_each(move |record| {
+                    generate_certificate(record, points.clone(), template.clone());
                 });
             });
         }
@@ -211,14 +197,7 @@ impl App for CertApp {
                 .sense(Sense::drag());
                 let image_res = ui.add(image);
 
-                // window.width - img.width will give us: right border + left border, we divide
-                // by 2 to get a single border space
-                let border_diff = (ctx.used_rect().width() - image.size().x) / 2.;
-                // the vertical diff is: top border + bottom border + (other elements)
-                // if we remove the two borders, we get the diff of the elements and title
-                let title_diff = ctx.used_rect().height() - image.size().y - (border_diff * 2.0);
-                let offset = Vec2::new(border_diff, border_diff + title_diff)
-                    + ctx.used_rect().min.to_vec2();
+                let offset = image_res.rect.min.to_vec2();
 
                 if image_res.drag_started() {
                     if let Some(position) = image_res.interact_pointer_pos() {
