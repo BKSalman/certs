@@ -38,7 +38,7 @@ pub fn generate_certificate(
     points: Vec<(Point, f32)>,
     template: Arc<Vec<u8>>,
 ) {
-    let filename = format!("{}-{}", &record[0], &record[0]);
+    let filename = format!("{}-{}", &record[0], &record[1]);
     let data = Data::new_copy(&template);
     let image = Image::from_encoded(data).unwrap();
     let mut surface = Surface::new_raster_n32_premul(image.dimensions()).unwrap();
@@ -60,10 +60,11 @@ fn draw_text(canvas: &mut Canvas, text: &str, position: Point, width: f32) {
 
     let mut paragraph_style = ParagraphStyle::new();
     paragraph_style.set_text_align(skia_safe::textlayout::TextAlign::Right);
+    // paragraph_style.set_text_direction(skia_safe::textlayout::TextDirection::RTL);
 
     let mut text_style = TextStyle::new();
     text_style
-        .set_font_families(&["AlHor"])
+        .set_font_families(&["Arial"])
         .set_font_size(40.)
         .set_foreground_color(Paint::default());
 

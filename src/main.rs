@@ -179,60 +179,6 @@ impl CertApp {
 impl App for CertApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.set_fonts(add_fonts());
-        egui::Window::new("Draw Areas")
-            .open(&mut self.window_open)
-            .anchor(Align2::CENTER_CENTER, [0., 0.])
-            .resizable(false)
-            .collapsible(false)
-            .show(ctx, |ui| {
-                let Some(template) = &self.image else {
-                    ui.label("choose a template");
-                    return;
-                };
-                let (current, current_color) = &mut self.rects[self.current_rect];
-
-                ui.label(
-                    RichText::new(format!("Column: {}", &self.columns[self.current_rect]))
-                        .color(*current_color),
-                );
-
-                let image = egui::Image::new(
-                    template.texture_id(ctx),
-                    Vec2::new(template.size_vec2().x / 2.5, template.size_vec2().y / 2.5),
-                )
-                .sense(Sense::drag());
-                let image_res = ui.add(image);
-
-                let offset = image_res.rect.min.to_vec2();
-
-                if image_res.drag_started() {
-                    if let Some(position) = image_res.interact_pointer_pos() {
-                        current.p1 = position - offset;
-                    }
-                }
-
-                if let Some(position) = image_res.interact_pointer_pos() {
-                    current.p2 = position - offset;
-                }
-
-                ui.painter().rect(
-                    Rect {
-                        max: (current.p1.max(current.p2) + offset),
-                        min: (current.p1.min(current.p2) + offset),
-                    },
-                    Rounding::none(),
-                    Color32::TRANSPARENT,
-                    Stroke::new(3., *current_color),
-                );
-                ui.horizontal(|ui| {
-                    for (i, column) in self.columns.iter().enumerate() {
-                        if ui.button(column).clicked() {
-                            self.current_rect = i;
-                        }
-                    }
-                });
-            });
-
         egui::TopBottomPanel::bottom("BottomPanel").show(ctx, |ui| {
             ui.set_enabled(!self.window_open);
             ui.horizontal(|ui| {
@@ -263,5 +209,65 @@ impl App for CertApp {
             ui.set_enabled(!self.window_open);
             self.table(ui);
         });
+
+        egui::Window::new("Draw Areas")
+            .open(&mut self.window_open)
+            .anchor(Align2::CENTER_CENTER, [0., 0.])
+            .resizable(false)
+            .collapsible(false)
+            .show(ctx, |ui| {
+                if self.rects.len() < 1 {
+                    ui.label("Add a CSV file");
+                    return;
+                }
+                let Some(template) = &self.image else {
+                    ui.label("Choose a template");
+                    return;
+                };
+                let (current, current_color) = &mut self.rects[self.current_rect];
+
+                ui.label(
+                    RichText::new(format!("Column: {}", &self.columns[self.current_rect]))
+                        .color(*current_color),
+                );
+
+                let image = egui::Image::new(
+                    template.texture_id(ctx),
+                    Vec2::new(template.size_vec2().x / 2.5, template.size_vec2().y / 2.5),
+                )
+                .sense(Sense::drag());
+                let image_res = ui.add(image);
+
+                let offset = image_res.rect.min.to_vec2();
+
+                if image_res.drag_started() {
+                    if let Some(position) = image_res.interact_pointer_pos() {
+                        current.p1 = position - offset;
+                    }
+                }
+
+                if let Some(position) = image_res.interact_pointer_pos() {
+                    current.p2 = position - offset;
+                }
+
+                for rect in &self.rects {
+                    ui.painter().rect(
+                        Rect {
+                            max: (rect.0.p1.max(rect.0.p2) + offset),
+                            min: (rect.0.p1.min(rect.0.p2) + offset),
+                        },
+                        Rounding::none(),
+                        Color32::TRANSPARENT,
+                        Stroke::new(3., rect.1),
+                    );
+                }
+                ui.horizontal(|ui| {
+                    for (i, column) in self.columns.iter().enumerate() {
+                        if ui.button(column).clicked() {
+                            self.current_rect = i;
+                        }
+                    }
+                });
+            });
     }
 }
