@@ -413,9 +413,10 @@ impl App for CertApp {
             .resizable(false)
             .collapsible(false)
             .show(ctx, |ui| {
-                ui.label(self.status.clone());
                 if self.config.email.username.is_empty() || self.config.email.password.is_empty() {
                     ui.label("Add Email credentials");
+                } else {
+                    ui.label(self.status.clone());
                 }
             });
 

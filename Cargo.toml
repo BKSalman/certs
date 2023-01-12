@@ -20,5 +20,4 @@ rand = "0.8.5"
 rayon = "1.6.1"
 serde = { version = "1.0.152", features = ["derive"] }
 skia-safe = { version = "0.57.0", features = ["textlayout"] }
-tokio = { version = "1.24.1", features = ["full"] }
 toml = "0.5.10"
