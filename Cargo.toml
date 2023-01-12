@@ -9,12 +9,16 @@ edition = "2021"
 anyhow = "1.0.68"
 arabic_reshaper = "0.4.1"
 csv = "1.1.6"
+dirs = "4.0.0"
 eframe = { version = "0.20.1", features = ["dark-light"] }
 egui_extras = { version = "0.20.0", features = ["image"] }
 image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }
 itertools = "0.10.5"
+lettre = "0.10.1"
 native-dialog = "0.6.3"
 rand = "0.8.5"
 rayon = "1.6.1"
+serde = { version = "1.0.152", features = ["derive"] }
 skia-safe = { version = "0.57.0", features = ["textlayout"] }
 tokio = { version = "1.24.1", features = ["full"] }
+toml = "0.5.10"

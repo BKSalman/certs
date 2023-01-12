@@ -1,6 +1,12 @@
 use csv::StringRecord;
 use eframe::egui::{FontData, FontDefinitions};
-use eframe::epaint::{FontFamily, Pos2};
+use eframe::epaint::{Color32, FontFamily, Pos2};
+use lettre::message::header::ContentType;
+use lettre::message::{Attachment, MultiPart};
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::{Message, SmtpTransport, Transport};
+use rand::{distributions::Standard, prelude::*};
+use serde::{Deserialize, Serialize};
 use skia_safe::textlayout::{FontCollection, ParagraphBuilder, ParagraphStyle, TextStyle};
 use skia_safe::{icu, Canvas, Data, EncodedImageFormat, FontMgr, Image, Paint, Point, Surface};
 use std::collections::HashMap;
@@ -8,6 +14,26 @@ use std::fs;
 use std::sync::Arc;
 
 pub type Record = HashMap<String, String>;
+
+pub struct Wrapper<T>(pub T);
+
+impl Distribution<Wrapper<Color32>> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Wrapper<Color32> {
+        let (r, g, b) = rng.gen();
+        Wrapper(Color32::from_rgb(r, g, b))
+    }
+}
+
+#[derive(Default, Clone, Debug, Deserialize, Serialize)]
+pub struct Config {
+    pub email: EmailCreds,
+}
+
+#[derive(Default, Clone, Debug, Deserialize, Serialize)]
+pub struct EmailCreds {
+    pub username: String,
+    pub password: String,
+}
 
 #[derive(Clone)]
 pub struct TextRect {
@@ -33,26 +59,57 @@ impl TextRect {
     }
 }
 
+pub fn send_email(email_creds: EmailCreds, filename: &str, to: &str) -> anyhow::Result<()> {
+    let attachment = Attachment::new(String::from("Certificate.png")).body(
+        fs::read(format!("output/{}", filename)).expect("Read file"),
+        ContentType::parse("image/png").expect("Failed to get MIME Type"),
+    );
+
+    let email = Message::builder()
+        .from(email_creds.username.parse().unwrap())
+        .to(to.parse().unwrap())
+        .subject("شهادة حضور")
+        .multipart(MultiPart::alternative().multipart(MultiPart::mixed().singlepart(attachment)))
+        .expect("Email");
+
+    let creds = Credentials::new(email_creds.username, email_creds.password);
+
+    let mailer = SmtpTransport::relay("smtp.gmail.com")
+        .unwrap()
+        .credentials(creds)
+        .build();
+
+    mailer.send(&email)?;
+
+    Ok(())
+}
+
 pub fn generate_certificate(
     record: &StringRecord,
     points: Vec<(Point, f32)>,
     template: Arc<Vec<u8>>,
+    filename: &str,
+    font_size: f32,
 ) {
-    let filename = format!("{}-{}.png", &record[0], &record[1]);
     let data = Data::new_copy(&template);
     let image = Image::from_encoded(data).unwrap();
     let mut surface = Surface::new_raster_n32_premul(image.dimensions()).unwrap();
     let mut canvas = surface.canvas();
     canvas.draw_image(image, Point::new(0., 0.), Some(&Paint::default()));
     for (field, point) in record.iter().zip(points) {
+        if point.0.is_zero() {
+            println!("skipping {field}");
+            continue;
+        }
+
         let width = point.1;
-        draw_text(&mut canvas, field, point.0, width);
+        draw_text(&mut canvas, field, point.0, width, font_size);
     }
     save_as(&mut surface, &filename);
     println!("saved!");
 }
 
-fn draw_text(canvas: &mut Canvas, text: &str, position: Point, width: f32) {
+fn draw_text(canvas: &mut Canvas, text: &str, position: Point, width: f32, font_size: f32) {
     icu::init();
 
     let mut font_collection = FontCollection::new();
@@ -65,7 +122,7 @@ fn draw_text(canvas: &mut Canvas, text: &str, position: Point, width: f32) {
     let mut text_style = TextStyle::new();
     text_style
         .set_font_families(&["Arial"])
-        .set_font_size(40.)
+        .set_font_size(font_size)
         .set_foreground_color(Paint::default());
 
     let mut paragraph_builder = ParagraphBuilder::new(&paragraph_style, font_collection);
