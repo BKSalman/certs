@@ -221,11 +221,14 @@ impl CertApp {
                 .collect::<Vec<(Point, f32)>>();
             let template = self.template.clone();
             let email_creds = self.config.email.clone();
-            let email_index = self
+            let Some(email_index) = self
                 .columns
                 .iter()
-                .position(|s| s.to_lowercase() == "email" || s == "البريد الالكتروني")
-                .expect("Email column");
+                .position(|s| s.to_lowercase() == "email" || s == "البريد الالكتروني") else {
+                self.send_email_window_open = true;
+                self.status = String::from("No email column");
+                return Ok(());
+            };
             let font_size = self.font_size;
 
             self.send_email_window_open = true;
