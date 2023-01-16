@@ -1,8 +1,8 @@
 use csv::StringRecord;
 use eframe::egui::{FontData, FontDefinitions};
 use eframe::epaint::{Color32, FontFamily, Pos2};
-use lettre::message::header::ContentType;
-use lettre::message::{Attachment, MultiPart};
+use lettre::message::header::{self, ContentType};
+use lettre::message::{Attachment, MultiPart, SinglePart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 use rand::{distributions::Standard, prelude::*};
@@ -65,6 +65,29 @@ pub fn send_email(email_creds: EmailCreds, filename: &str, to: &str) -> anyhow::
         ContentType::parse("image/png").expect("Failed to get MIME Type"),
     );
 
+    #[cfg(feature = "baba")]
+    let html = include_str!("../baba.html");
+
+    #[cfg(feature = "baba")]
+    let subject = include_str!("../baba-subject.txt");
+
+    #[cfg(feature = "baba")]
+    let email = Message::builder()
+        .from(email_creds.username.parse().unwrap())
+        .to(to.parse().unwrap())
+        .subject(subject)
+        .multipart(
+            MultiPart::alternative().multipart(
+                MultiPart::mixed().singlepart(attachment).singlepart(
+                    SinglePart::builder()
+                        .header(ContentType::TEXT_HTML)
+                        .body(String::from(html)),
+                ),
+            ),
+        )
+        .expect("Email");
+
+    #[cfg(not(feature = "baba"))]
     let email = Message::builder()
         .from(email_creds.username.parse().unwrap())
         .to(to.parse().unwrap())

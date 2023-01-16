@@ -282,10 +282,13 @@ impl App for CertApp {
                 if button.clicked() {
                     self.generate_certificates().expect("certificates");
                 }
-                // let button = ui.add_sized([20., 30.], Button::new("Email Credentials"));
-                // if button.clicked() {
-                //     self.email_window_open = true;
-                // }
+                #[cfg(not(feature = "baba"))]
+                {
+                    let button = ui.add_sized([20., 30.], Button::new("Email Credentials"));
+                    if button.clicked() {
+                        self.email_window_open = true;
+                    }
+                }
                 let button = ui.add_sized([20., 30.], Button::new("Send Email"));
                 if button.clicked() {
                     println!("Send Email");
