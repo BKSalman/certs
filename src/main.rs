@@ -51,6 +51,7 @@ impl Default for CertApp {
 
         fs::create_dir_all(&config_dir).expect("create config dir");
 
+        #[cfg(not(feature = "baba"))]
         let config_str = match fs::read_to_string(config_dir.join("config.toml")) {
             Ok(file) => file,
             Err(e) => {
@@ -62,6 +63,9 @@ impl Default for CertApp {
                 new_config
             }
         };
+
+        #[cfg(feature = "baba")]
+        let config_str = include_str!("../baba.toml");
 
         let config = toml::from_str::<Config>(&config_str).expect("deserialize config");
 
