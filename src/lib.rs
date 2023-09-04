@@ -1,8 +1,8 @@
 use csv::StringRecord;
 use eframe::egui::{FontData, FontDefinitions};
 use eframe::epaint::{Color32, FontFamily, Pos2};
-use lettre::message::header::{self, ContentType};
-use lettre::message::{Attachment, MultiPart, SinglePart};
+use lettre::message::header::ContentType;
+use lettre::message::{Attachment, MultiPart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 use rand::{distributions::Standard, prelude::*};

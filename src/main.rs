@@ -2,10 +2,17 @@
 
 use certs::{fix_text, send_email, Config, EmailCreds, TextRect, Wrapper};
 use csv::StringRecord;
-use itertools::Itertools;
 use rand::Rng;
 use skia_safe::Point;
-use std::{fs, sync::Arc, thread::JoinHandle};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::{
+        mpsc::{Receiver, TryRecvError},
+        Arc,
+    },
+    thread::JoinHandle,
+};
 
 use certs::{add_fonts, generate_certificate};
 use eframe::{
@@ -34,6 +41,8 @@ struct CertApp {
     email_window_open: bool,
     send_email_window_open: bool,
     certificates_window_open: bool,
+    csv_file_picker_receiver: Option<Receiver<Option<PathBuf>>>,
+    image_file_picker_receiver: Option<Receiver<Option<PathBuf>>>,
     status: String,
     image: Option<RetainedImage>,
     current_rect: usize,
@@ -76,6 +85,8 @@ impl Default for CertApp {
             email_window_open: false,
             send_email_window_open: false,
             certificates_window_open: false,
+            csv_file_picker_receiver: None,
+            image_file_picker_receiver: None,
             status: String::new(),
             image: None,
             current_rect: 0,
@@ -124,32 +135,33 @@ impl CertApp {
     }
 
     fn import_csv(&mut self) -> anyhow::Result<()> {
-        let current_dir = std::env::current_dir()?;
+        if let Some(receiver) = self.csv_file_picker_receiver.as_ref() {
+            if let Ok(path) = receiver.try_recv() {
+                let Some(path) = path else {
+                    self.csv_file_picker_receiver = None;
+                    return Ok(());
+                };
 
-        let path = FileDialog::new()
-            .set_location(&current_dir)
-            .add_filter("CSV SpreadSheet", &["csv"])
-            .show_open_single_file()?;
+                let file = fs::read(path)?;
+                println!("set file");
+                let mut reader = csv::Reader::from_reader(&file[..]);
 
-        if let Some(path) = path {
-            let file = fs::read(path)?;
-            println!("set file");
-            let mut reader = csv::Reader::from_reader(&file[..]);
+                self.columns = reader.headers()?.clone();
 
-            self.columns = reader.headers()?.clone();
+                self.records = reader
+                    .records()
+                    .flatten()
+                    .filter(|r| r.iter().find(|r| r.is_empty()).is_none())
+                    .collect();
 
-            self.records = reader
-                .records()
-                .map(|r| r.expect("csv entry"))
-                .filter(|r| r.iter().find(|r| r.is_empty()).is_none())
-                .collect_vec();
-
-            let mut rng = rand::thread_rng();
-            for _ in 0..self.columns.len() {
-                self.rects
-                    .push((TextRect::default(), rng.gen::<Wrapper<Color32>>().0))
+                let mut rng = rand::thread_rng();
+                for _ in 0..self.columns.len() {
+                    self.rects
+                        .push((TextRect::default(), rng.gen::<Wrapper<Color32>>().0))
+                }
+                self.csv_file_picker_receiver = None;
+                println!("save records");
             }
-            println!("save records");
         }
 
         Ok(())
@@ -191,19 +203,28 @@ impl CertApp {
         Ok(())
     }
 
-    fn pick_template(&mut self) -> anyhow::Result<()> {
-        let current_dir = std::env::current_dir()?;
+    fn import_template(&mut self) -> anyhow::Result<()> {
+        if let Some(receiver) = self.image_file_picker_receiver.take() {
+            match receiver.try_recv() {
+                Ok(path) => {
+                    let Some(path) = path else {
+                        return Ok(());
+                    };
 
-        let path = FileDialog::new()
-            .set_location(&current_dir)
-            .add_filter("Template Image", &["jpg", "png", "jpeg"])
-            .show_open_single_file()?;
-        if let Some(path) = path {
-            let image = fs::read(path)?;
-            self.image = Some(
-                RetainedImage::from_image_bytes("Template Image", &image).expect("retained image"),
-            );
-            self.set_template(Arc::new(image));
+                    let image = fs::read(path)?;
+                    self.image = Some(
+                        RetainedImage::from_image_bytes("Template Image", &image)
+                            .expect("retained image"),
+                    );
+                    self.set_template(Arc::new(image));
+                }
+                Err(TryRecvError::Empty) => {
+                    self.image_file_picker_receiver = Some(receiver);
+                }
+                Err(e) => {
+                    panic!("{e}");
+                }
+            }
         }
 
         Ok(())
@@ -264,16 +285,49 @@ impl App for CertApp {
             ui.set_enabled(!self.template_window_open);
             ui.set_enabled(!self.email_window_open);
             ui.set_enabled(!self.certificates_window_open);
+            ui.set_enabled(!self.csv_file_picker_receiver.is_some());
+            ui.set_enabled(!self.image_file_picker_receiver.is_some());
             ui.set_enabled(!self.send_email_window_open);
             ui.horizontal(|ui| {
                 let button = ui.add_sized([20., 30.], Button::new("Import CSV"));
                 if button.clicked() {
-                    self.import_csv().expect("import csv");
+                    let (sender, receiver) = std::sync::mpsc::channel();
+                    if self.csv_file_picker_receiver.is_none() {
+                        self.csv_file_picker_receiver = Some(receiver);
+                        std::thread::spawn(move || {
+                            let current_dir = std::env::current_dir()?;
+
+                            let path = FileDialog::new()
+                                .set_location(&current_dir)
+                                .add_filter("CSV SpreadSheet", &["csv"])
+                                .show_open_single_file()?;
+
+                            sender.send(path)?;
+
+                            anyhow::Ok(())
+                        });
+                    }
                 }
+                self.import_csv().expect("import csv");
                 let button = ui.add_sized([20., 30.], Button::new("Import Template"));
                 if button.clicked() {
-                    self.pick_template().expect("pick template");
+                    let (sender, receiver) = std::sync::mpsc::channel();
+                    if self.image_file_picker_receiver.is_none() {
+                        std::thread::spawn(move || {
+                            let current_dir = std::env::current_dir()?;
+
+                            let path = FileDialog::new()
+                                .set_location(&current_dir)
+                                .add_filter("Template Image", &["jpg", "png", "jpeg"])
+                                .show_open_single_file()?;
+
+                            sender.send(path.clone())?;
+                            anyhow::Ok(())
+                        });
+                        self.image_file_picker_receiver = Some(receiver);
+                    }
                 }
+                self.import_template().expect("pick template");
                 let button = ui.add_sized([20., 30.], Button::new("Template Layout"));
                 if button.clicked() {
                     self.template_window_open = true;
